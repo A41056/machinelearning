@@ -1,35 +1,49 @@
 import pandas as pd
 
-def preprocess_data(df):
+def preprocess_data(filepath):
+    # Đọc dữ liệu
+    df = pd.read_csv(filepath, encoding='ISO-8859-1')
     print(f"Initial data shape: {df.shape}")
 
     # Chuyển đổi cột InvoiceDate thành datetime
     df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
     
-    # Loại bỏ các đơn hàng trả lại (InvoiceNo bắt đầu bằng 'C')
-    df = df[~df['InvoiceNo'].str.startswith('C', na=False)]
-    print(f"After removing returns: {df.shape}")
+    # Loại bỏ các hàng có CustomerID rỗng
+    df = df.dropna(subset=['CustomerID'])
+    print(f"Dataframe dimensions after removing null CustomerID: {df.shape}")
+    
+    # Loại bỏ các hàng trùng lặp
+    df = df.drop_duplicates()
+    print(f"Dataframe dimensions after removing duplicates: {df.shape}")
 
-    # Tính tổng giá trị đơn hàng (Quantity * UnitPrice)
+    # Tạo cột mới để đánh dấu các đơn hàng bị hủy
+    df['order_canceled'] = df['InvoiceNo'].str.startswith('C').astype(int)
+    
+    # Đếm số lượng đơn hàng bị hủy
+    num_cancellations = df['order_canceled'].sum()
+    total_transactions = df['InvoiceNo'].nunique()
+    print(f"Number of orders canceled: {num_cancellations}/{total_transactions} ({(num_cancellations / total_transactions) * 100:.2f}%)")
+    
+    # Xử lý các mã sản phẩm đặc biệt
+    special_codes = df[df['StockCode'].str.contains(r'^[A-Z]+$', regex=True)]['StockCode'].unique()
+    print("Special Stock Codes:")
+    print(special_codes)
+    
+    # Tính tổng giá trị đơn hàng
     df['TotalPrice'] = df['Quantity'] * df['UnitPrice']
     
-    # Loại bỏ các hàng có giá trị Quantity hoặc UnitPrice <= 0
-    df = df[(df['Quantity'] > 0) & (df['UnitPrice'] > 0)]
-    print(f"After removing invalid Quantity or UnitPrice: {df.shape}")
+    return df
 
-    # Kiểm tra giá trị thiếu trong CustomerID
-    missing_customer_ids = df['CustomerID'].isna().sum()
-    print(f"Missing CustomerID values: {missing_customer_ids}")
+def save_cleaned_data(df, filepath):
+    df.to_csv(filepath, index=False)
+    print(f"Cleaned data saved to {filepath}")
 
-    # Điền giá trị thiếu trong CustomerID bằng giá trị mặc định (ví dụ: -1)
-    df['CustomerID'].fillna(-1, inplace=True)
-    print(f"After filling missing CustomerID: {df.shape}")
+# Đường dẫn tới tệp dữ liệu
+input_filepath = './EcommerceData/ecommerce-data.csv'
+output_filepath = './EcommerceData/cleaned_ecommerce_data.csv'
 
-    # Tổng hợp dữ liệu theo khách hàng
-    df_grouped = df.groupby('CustomerID').agg({
-        'Quantity': 'sum',
-        'TotalPrice': 'sum'
-    }).reset_index()
-    print(f"After grouping by CustomerID: {df_grouped.shape}")
-    
-    return df_grouped
+# Thực hiện tiền xử lý dữ liệu
+df_cleaned = preprocess_data(input_filepath)
+
+# Lưu dữ liệu đã chuẩn bị
+save_cleaned_data(df_cleaned, output_filepath)
